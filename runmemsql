@@ -1,0 +1,1 @@
+sql/mysqld --no-defaults --durability=metadata --console --basedir=. --datadir=sql/data --tmpdir=/tmp/ --core-file --lc-messages-dir=./sql/share --character-sets-dir=sql/share/charsets

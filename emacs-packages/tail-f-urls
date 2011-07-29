@@ -1,0 +1,157 @@
+#!/usr/bin/env perl
+# tail-f-urls
+# Copyright (C) 2009 Facebook Inc.
+# By Greg Badros <badros@facebook.com>
+#
+# Ssh to a remote machine, tail a file watching
+# for new lines appended to it, interpret those
+# new lines as URIs and send a local Firefox
+# browser to those URIs.
+#
+# Only simple sanity checking is done, and
+# there are obvious security implications
+# if writing to the remote file is unsecured.
+#
+# See also the emacs package browse-url-append-to-file.el
+
+
+require 5.005;
+use warnings;
+use Getopt::Std;
+use File::Basename;
+use strict;
+
+my $getopts_option_letters = 'hH:T:pf:lLq';
+use vars qw($opt_h $opt_H $opt_T $opt_p $opt_f $opt_l $opt_L $opt_q);
+
+my $prg = basename("$0");
+
+sub usage () {
+    die "@_
+Usage: $prg [-$getopts_option_letters]
+-h            Help. Display this usage information
+-H host       Host to ssh/plink to (required)
+-T FILE_PATH  Remote file path to tail on that host
+                Defaults to ./private/.browse-url-append-to-file-urls.txt
+-p            Use plink.exe (for Windows) - this also sets
+                a default path to firefox differently.
+-f FFOX_PATH  Path to Firefox, if not in your \$PATH/%PATH%
+                Defaults to 'firefox' unless -p in which case
+                 it defaults to c:/Program Files/Mozilla Firefox 3.5/firefox.exe
+-l            Turn on lenient URI processing -- allow more URIs through
+-L            Turn on anything-goes lenient URI processing
+-q            Quiet mode, do not output URLs as they are visited or any debug info
+
+Stops reading lines when encountering a line
+\`::shutdown tail-f-urls\'
+
+If reading \`::new-{window,tab}\', make the next url encountered
+open in a new window/tab.
+";
+}
+
+
+if (defined($ARGV[0]) && $ARGV[0] eq "--help") {
+    usage();
+    exit 0;
+}
+
+getopts($getopts_option_letters);
+if ($opt_h) {
+    usage();
+    exit 0;
+}
+
+# Main routine
+my $ssh = "ssh";
+if ($opt_p) {
+    $ssh = "plink.exe";
+}
+
+my $host = $opt_H || die "You must specify -H host option.";
+my $rpath = $opt_T || "./private/.browse-url-append-to-file-urls.txt";
+
+my $ffox = 'firefox';
+if ($opt_p) {
+    $ffox = 'c:\Program Files\Mozilla Firefox 3.5\firefox.exe';
+}
+if ($opt_f) {
+    $ffox = $opt_f;
+}
+
+if (!$opt_q) {
+    print STDERR "ssh = $ssh\n";
+    print STDERR "ffox = $ffox\n";
+}
+
+open(F, "$ssh $host tail -0f $rpath |")
+    or die "Cannot ssh to $opt_H and exec tail on $rpath: $!";
+
+my $uri_match_regexp = '^https?://\S{0,100}/\S{0,800}$';
+if ($opt_l) {
+    # don't allow whitespace, but everything else is fine
+    $uri_match_regexp = '^(\S+)$';
+} elsif ($opt_L) {
+    # as long as there's a single non-whitespace, we're a go
+    $uri_match_regexp = '\S';
+}
+
+
+my $suffix = "";
+while (my $url = <F>) {
+    if ($url eq "::shutdown tail-f-urls") {
+        exit 0;
+    } elsif ($url eq "::new-window") {
+        $suffix = ",new-window";
+    } elsif ($url eq "::new-tab") {
+        $suffix = ",new-tab";
+    }
+    if ($url =~ m/$uri_match_regexp/o) {
+        if (!$opt_q) {
+            print STDERR $url;
+        }
+        system($ffox, '-remote', "openURL($url$suffix)");
+    } else {
+        if (!$opt_q) {
+            print STDERR "Ignoring: \`$url\'";
+        }
+    }
+    $suffix = "";
+}
+
+
+__END__
+
+=head1 NAME
+
+tail-f-urls -- Make firefox visit new URLs written to a remote file
+
+=head1 SYNOPSIS
+
+=head1 DESCRIPTION
+
+Ssh to a remote machine, tail a file watching
+for new lines appended to it, interpret those
+new lines as URIs and send a local Firefox
+browser to those URIs.
+
+Only simple sanity checking is done, and
+there are obvious security implications
+if writing to the remote file is unsecured.
+
+See also the emacs package browse-url-append-to-file.el
+
+I<Disclaimer: You choose to use this script at your own risk!>
+
+=head1 BUGS
+
+=head1 SEE ALSO
+
+=head1 COPYRIGHT
+Copyright (C) 2009 Facebook Inc.
+
+=head1 AUTHOR
+
+Greg Badros <Fbadros@facebook.com>
+
+=cut
